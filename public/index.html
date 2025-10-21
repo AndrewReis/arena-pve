@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script type="module" src="/script.js"></script>
+  <title>Arena PVE - Game</title>
+  <style>
+    #gameCanvas {
+      border: 1px solid black;
+      background-color: #c3c3c3;
+    }
+  </style>
+</head>
+
+<body class="h-screen">
+  <div id="app" class="w-full h-full flex items-center justify-center">
+    <canvas ref="canvas" id="gameCanvas" width="10px" height="10px"></canvas>
+  </div>
+</body>
+
+</html>
