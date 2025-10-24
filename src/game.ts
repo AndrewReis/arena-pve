@@ -1,49 +1,8 @@
-export interface Effect {
-  attribute: "health" | "stamina" | "attack" | "defense" | "accuracy" | "evasion" | "velocity";
-  value: number;
-  duration: number;
-}
-
-export interface Ability {
-  id: string;
-  name: string;
-  type: "melee" | "ranged" | "support";
-  value: number;
-  staminaCost: number;
-  cooldown: number;
-  isBlocked: boolean;
-  target: "enemy-single" | "enemy-all" | "ally-single" | "ally-all" | "self";
-  effects?: Effect[];
-}
-
-export interface Character {
-  id: string;
-  name: string;
-  role: string;
-  stats: {
-    health: number;
-    stamina: number;
-    attack: number;
-    defense: number;
-    accuracy: number;
-    evasion: number;
-    velocity: number;
-  };
-  abilities: Ability[];
-}
-
-interface State {
-  heroes: Character[];
-  enemies: Character[];
-  currentPlayer: string | null;
-  turnOrder: string[];
-  isGameOver: boolean;
-  effectsQueue: { targetId: string; effect: Effect; remainingDuration: number }[];
-  abilitiesCooldowns: { [characterId: string]: { [abilityId: string]: number } };
-}
+import { Character, State } from "./types";
 
 export class GameEngine {
   private id: string;
+  private enemyMoviment: { actionIndex: number; targetId: string; } | null = null;
   private state: State = {
     heroes: [],
     enemies: [],
@@ -61,7 +20,7 @@ export class GameEngine {
     this.initializeTurnOrder();
   }
 
-  getState() {
+  getShortState() {
     const shortState = {
       heroes: this.state.heroes,
       enemies: this.state.enemies.map(enemy => ({
@@ -84,6 +43,14 @@ export class GameEngine {
     };
 
     return shortState;
+  }
+
+  getState() {
+    return this.state;
+  }
+
+  setEnemyMoviment(moviment: { actionIndex: number; targetId: string; } | null) {
+    this.enemyMoviment = moviment;
   }
 
   getId() {
@@ -208,6 +175,14 @@ export class GameEngine {
     if (!this.state.heroes.length || !this.state.enemies.length) {
       this.state.isGameOver = true;
     }
+  }
+
+  checkIsEnemyTurn() {
+    const currentPlayer = [...this.state.heroes, ...this.state.enemies].find(char => char.id === this.state.currentPlayer);
+    if (currentPlayer) {
+      return this.state.enemies.some(enemy => enemy.id === currentPlayer.id);
+    }
+    return false;
   }
 
   initializeTurnOrder() {

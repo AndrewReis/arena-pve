@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import cors from '@fastify/cors'
@@ -6,7 +7,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 import { DATA_BASE_CHARACTERS } from './fakedb';
+
 import { GameEngine } from './game';
+import { AIService } from './ai-service';
 
 const server = fastify({
   logger: false
@@ -33,7 +36,7 @@ server.post('/game', async (request, reply) => {
 
   return reply.status(201).send({
     id: gameEngine.getId(),
-    state: gameEngine.getState()
+    state: gameEngine.getShortState()
   });
 });
 
@@ -47,7 +50,7 @@ server.get('/game/:gameId/state', async (request, reply) => {
 
   return reply.send({
     id: gameEngine.getId(),
-    state: gameEngine.getState()
+    state: gameEngine.getShortState()
   });
 });
 
@@ -61,11 +64,22 @@ server.post('/game/:gameId/apply-action', async (request, reply) => {
     return reply.status(404).send({ error: 'Game not found' });
   }
 
+  const aiService = new AIService(gameEngine.getState());
+
   gameEngine.applyAction(ability, targetId);
+
+  let aiResponse: { actionIndex: number; targetId: string; } | null = null;
+
+  if (gameEngine.checkIsEnemyTurn()) {
+    const prompt = aiService.generatePrompt();
+    aiResponse = await aiService.sendPromptToAI(prompt);
+    gameEngine.setEnemyMoviment(aiResponse);
+  }
 
   return reply.send({
     id: gameEngine.getId(),
-    state: gameEngine.getState()
+    state: gameEngine.getShortState(),
+    enemyMoviment: aiResponse || null
   });
 });
 
