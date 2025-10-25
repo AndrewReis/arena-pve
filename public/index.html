@@ -1,25 +1,181 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-  <script type="module" src="/script.js"></script>
-  <title>Arena PVE - Game</title>
+  <title>Gerador de Spritesheet + JSON (Phaser 3)</title>
   <style>
-    #gameCanvas {
-      border: 1px solid black;
-      background-color: #c3c3c3;
+    body {
+      font-family: sans-serif;
+      background: #121212;
+      color: #eee;
+      text-align: center;
+      padding: 20px;
+    }
+
+    input,
+    button {
+      margin: 10px;
+      padding: 6px 10px;
+      font-size: 14px;
+    }
+
+    canvas {
+      border: 1px solid #444;
+      margin-top: 20px;
+      background: #222;
+    }
+
+    textarea {
+      width: 90%;
+      height: 200px;
+      margin-top: 20px;
     }
   </style>
 </head>
 
-<body class="h-screen">
-  <div id="app" class="w-full h-full flex items-center justify-center">
-    <canvas ref="canvas" id="gameCanvas" width="10px" height="10px"></canvas>
+<body>
+
+  <h2>🎨 Gerador de Spritesheet + JSON (Phaser 3)</h2>
+
+  <input type="file" id="fileInput" multiple accept="image/*"><br>
+  <label>Nome da animação:</label>
+  <input type="text" id="animName" placeholder="ex: run, idle, attack">
+  <button id="generateBtn">Gerar Spritesheet + JSON</button>
+
+  <div>
+    <canvas id="previewCanvas" width="128" height="128"></canvas>
   </div>
+
+  <div>
+    <canvas id="canvas"></canvas>
+  </div>
+
+
+  <h3>📜 JSON (copie e salve como .json)</h3>
+  <textarea id="jsonOutput" readonly></textarea>
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const animNameInput = document.getElementById('animName');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const jsonOutput = document.getElementById('jsonOutput');
+    const generateBtn = document.getElementById('generateBtn');
+
+    // Preview
+    const previewCanvas = document.getElementById('previewCanvas');
+    const pctx = previewCanvas.getContext('2d');
+
+    let previewFrames = [];
+    let currentFrame = 0;
+    let previewTimer = null;
+
+    fileInput.addEventListener('change', async () => {
+      const files = [...fileInput.files];
+      if (!files.length) return;
+
+      previewFrames = await Promise.all(files.map(loadImage));
+      startPreview();
+    });
+
+    function startPreview() {
+      if (previewTimer) clearInterval(previewTimer);
+      currentFrame = 0;
+
+      previewTimer = setInterval(() => {
+        if (!previewFrames.length) return;
+        const frame = previewFrames[currentFrame];
+        const scale = Math.min(
+          previewCanvas.width / frame.width,
+          previewCanvas.height / frame.height
+        );
+
+        const offsetX = (previewCanvas.width - frame.width * scale) / 2;
+        const offsetY = (previewCanvas.height - frame.height * scale) / 2;
+
+        pctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+        pctx.drawImage(
+          frame,
+          offsetX,
+          offsetY,
+          frame.width * scale,
+          frame.height * scale
+        );
+
+        currentFrame = (currentFrame + 1) % previewFrames.length;
+      }, 100);
+    }
+    // Preview
+
+    generateBtn.addEventListener('click', async () => {
+      const files = [...fileInput.files];
+      const animName = animNameInput.value.trim() || 'anim';
+      if (!files.length) return alert('Selecione as imagens primeiro!');
+      if (!animName) return alert('Digite um nome para a animação!');
+
+      const images = await Promise.all(files.map(loadImage));
+      const frameWidth = images[0].width;
+      const frameHeight = images[0].height;
+      const columns = Math.ceil(Math.sqrt(images.length));
+      const rows = Math.ceil(images.length / columns);
+
+      canvas.width = frameWidth * columns;
+      canvas.height = frameHeight * rows;
+
+      const frames = {};
+      let i = 0;
+
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < columns; x++) {
+          const img = images[i];
+          if (!img) continue;
+
+          ctx.drawImage(img, x * frameWidth, y * frameHeight);
+          const frameName = `${animName}_${i.toString().padStart(2, '0')}.png`;
+
+          frames[frameName] = {
+            frame: { x: x * frameWidth, y: y * frameHeight, w: frameWidth, h: frameHeight },
+            rotated: false,
+            trimmed: false,
+            spriteSourceSize: { x: 0, y: 0, w: frameWidth, h: frameHeight },
+            sourceSize: { w: frameWidth, h: frameHeight }
+          };
+
+          i++;
+        }
+      }
+
+      const json = {
+        frames,
+        meta: {
+          app: "Simple Sprite Packer",
+          version: "1.1",
+          image: `${animName}.png`,
+          format: "RGBA8888",
+          size: { w: canvas.width, h: canvas.height },
+          scale: "1"
+        }
+      };
+
+      jsonOutput.value = JSON.stringify(json, null, 2);
+
+      // Baixar imagem do spritesheet
+      const link = document.createElement('a');
+      link.download = `${animName}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.textContent = `💾 Baixar ${animName}.png`;
+      document.body.appendChild(link);
+    });
+
+    function loadImage(file) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.src = URL.createObjectURL(file);
+      });
+    }
+  </script>
 </body>
 
 </html>
