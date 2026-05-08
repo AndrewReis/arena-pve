@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 
-import { State } from "./types";
+import type { State } from "@/modules/game-engine/types";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";

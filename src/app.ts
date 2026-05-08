@@ -1,34 +1,34 @@
 import 'dotenv/config';
-import fastify from 'fastify';
+
+import fastify       from 'fastify';
 import fastifyStatic from '@fastify/static';
-import cors from '@fastify/cors'
+import cors          from '@fastify/cors'
+import path          from 'node:path';
+import crypto        from 'node:crypto';
 
-import path from 'node:path';
-import crypto from 'node:crypto';
+import { DATA_BASE_CHARACTERS } from '@/fakedb';
 
-import { DATA_BASE_CHARACTERS } from './fakedb';
+import { GameEngine } from '@/modules/game-engine/entities/game';
+import { AIService } from '@/ai-service';
 
-import { GameEngine } from './game';
-import { AIService } from './ai-service';
-
-const server = fastify({
+const app = fastify({
   logger: false
 });
 
-server.register(cors, {
+app.register(cors, {
   origin: '*'
 })
 
-server.register(fastifyStatic, {
+app.register(fastifyStatic, {
   root: path.join(__dirname, '..', 'public')
 });
 
 const database = new Map<string, GameEngine>();
 
-server.post('/game', async (request, reply) => {
+app.post('/game', async (request, reply) => {
   const gameEngine = new GameEngine({
-    heroes: [DATA_BASE_CHARACTERS[0], DATA_BASE_CHARACTERS[1], DATA_BASE_CHARACTERS[2]],
-    enemies: [DATA_BASE_CHARACTERS[3], DATA_BASE_CHARACTERS[4], DATA_BASE_CHARACTERS[5]],
+    heroes: [DATA_BASE_CHARACTERS[0]!, DATA_BASE_CHARACTERS[1]!, DATA_BASE_CHARACTERS[2]!],
+    enemies: [DATA_BASE_CHARACTERS[3]!, DATA_BASE_CHARACTERS[4]!, DATA_BASE_CHARACTERS[5]!],
     id: crypto.randomUUID()
   });
 
@@ -40,7 +40,7 @@ server.post('/game', async (request, reply) => {
   });
 });
 
-server.get('/game/:gameId/state', async (request, reply) => {
+app.get('/game/:gameId/state', async (request, reply) => {
   const { gameId } = request.params as { gameId: string };
   const gameEngine = database.get(gameId);
 
@@ -54,7 +54,7 @@ server.get('/game/:gameId/state', async (request, reply) => {
   });
 });
 
-server.post('/game/:gameId/apply-action', async (request, reply) => {
+app.post('/game/:gameId/apply-action', async (request, reply) => {
   const { gameId } = request.params as { gameId: string };
   const { targetId, ability } = (request.body) as { targetId: string; ability: number };
 
@@ -83,15 +83,6 @@ server.post('/game/:gameId/apply-action', async (request, reply) => {
   });
 });
 
-const start = async () => {
-  try {
-    const port = 3000;
-    await server.listen({ port: port, host: '0.0.0.0' });
-    console.log(`Servidor rodando em http://localhost:${port}`);
-  } catch (err) {
-    server.log.error(err);
-    process.exit(1);
-  }
-};
-
-start();
+export {
+  app
+}

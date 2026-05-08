@@ -1,4 +1,4 @@
-import { Character, State } from "./types";
+import type { Character, State } from "@/modules/game-engine/types";
 
 export class GameEngine {
   private id: string;
@@ -58,21 +58,26 @@ export class GameEngine {
   }
 
   applyAction(actionIdx: number, targetId: string) {
-    let player = [...this.state.heroes, ...this.state.enemies].find(char => char.id === this.state.currentPlayer);
+    const player = [...this.state.heroes, ...this.state.enemies].find(char => char.id === this.state.currentPlayer);
 
     if (!player) {
       console.error("No current player found!");
       return;
     }
 
-    let ability = player.abilities[actionIdx];
+    const ability = player.abilities[actionIdx];
+
+    if (!ability) {
+      console.error("Ability not found!");
+      return;
+    }
 
     if (ability.isBlocked) {
       console.error("Ability is blocked due to insufficient stamina!");
       return;
     }
 
-    let target = [...this.state.heroes, ...this.state.enemies].find(char => char.id === targetId);
+    const target = [...this.state.heroes, ...this.state.enemies].find(char => char.id === targetId);
 
 
     if (!target) {
@@ -141,11 +146,27 @@ export class GameEngine {
 
   removeCooldowns() {
     Object.keys(this.state.abilitiesCooldowns).forEach(charId => {
-      Object.keys(this.state.abilitiesCooldowns[charId]).forEach(abilityId => {
-        this.state.abilitiesCooldowns[charId][abilityId] -= 1;
-        if (this.state.abilitiesCooldowns[charId][abilityId] <= 0) {
-          delete this.state.abilitiesCooldowns[charId][abilityId];
+      const cooldowns = this.state.abilitiesCooldowns[charId];
+
+      if (!cooldowns) {
+        return;
+      }
+
+      Object.keys(cooldowns).forEach(abilityId => {
+        const remainingCooldown = cooldowns[abilityId];
+
+        if (remainingCooldown === undefined) {
+          return;
         }
+
+        const nextCooldown = remainingCooldown - 1;
+
+        if (nextCooldown <= 0) {
+          delete cooldowns[abilityId];
+          return;
+        }
+
+        cooldowns[abilityId] = nextCooldown;
       });
     });
   }
@@ -164,7 +185,7 @@ export class GameEngine {
 
     const currentIndex = this.state.turnOrder.indexOf(this.state.currentPlayer);
     const nextIndex = (currentIndex + 1) % this.state.turnOrder.length;
-    this.state.currentPlayer = this.state.turnOrder[nextIndex];
+    this.state.currentPlayer = this.state.turnOrder[nextIndex] ?? null;
     this.applyEffects();
     this.removeCooldowns();
     this.checkAvailableActions();
@@ -187,6 +208,6 @@ export class GameEngine {
 
   initializeTurnOrder() {
     this.state.turnOrder = [...this.state.heroes, ...this.state.enemies].sort((a, b) => b.stats.velocity - a.stats.velocity).map((char) => char.id);
-    this.state.currentPlayer = this.state.turnOrder[0];
+    this.state.currentPlayer = this.state.turnOrder[0] ?? null;
   }
 }

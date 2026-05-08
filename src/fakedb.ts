@@ -1,4 +1,4 @@
-import { Character } from "./game";
+import type { Character } from "@/modules/game-engine/types";
 
 export const DATA_BASE_CHARACTERS: Character[] = [
   {
