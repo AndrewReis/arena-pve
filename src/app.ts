@@ -3,6 +3,7 @@ import 'dotenv/config';
 import fastify       from 'fastify';
 import fastifyStatic from '@fastify/static';
 import cors          from '@fastify/cors'
+import { fileURLToPath } from 'node:url';
 import path          from 'node:path';
 import crypto        from 'node:crypto';
 
@@ -10,6 +11,8 @@ import { DATA_BASE_CHARACTERS } from '@/fakedb';
 
 import { GameEngine } from '@/modules/game-engine/entities/game';
 import { AIService } from '@/ai-service';
+
+const publicDirectory = path.join(fileURLToPath(new URL('.', import.meta.url)), '..', 'public');
 
 const app = fastify({
   logger: false
@@ -20,7 +23,7 @@ app.register(cors, {
 })
 
 app.register(fastifyStatic, {
-  root: path.join(__dirname, '..', 'public')
+  root: publicDirectory
 });
 
 const database = new Map<string, GameEngine>();
