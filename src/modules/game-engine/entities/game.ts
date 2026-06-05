@@ -1,8 +1,15 @@
 import type { Character, State } from "@/modules/game-engine/types";
+import { CooldownSystem }   from "@/modules/game-engine/systems/cooldown-system";
+import { EffectProcessor }  from "@/modules/game-engine/systems/effect-processor";
+import { AbilityValidator } from "@/modules/game-engine/systems/ability-validator";
+import { CombatResolver }   from "@/modules/game-engine/systems/combat-resolver";
+import { TurnManager }      from "@/modules/game-engine/systems/turn-manager";
+import { EventBus }         from "@/modules/game-engine/events/event-bus";
+import type { GameEvents }  from "@/modules/game-engine/events/game-events";
 
 export class GameEngine {
-  private id: string;
-  private enemyMoviment: { actionIndex: number; targetId: string; } | null = null;
+  private readonly id: string;
+  private enemyMoviment: { actionIndex: number; targetId: string } | null = null;
   private state: State = {
     heroes: [],
     enemies: [],
@@ -10,204 +17,80 @@ export class GameEngine {
     turnOrder: [],
     isGameOver: false,
     effectsQueue: [],
-    abilitiesCooldowns: {}
+    abilitiesCooldowns: {},
   };
 
-  constructor({ heroes, enemies, id }: { heroes: Character[]; enemies: Character[], id: string }) {
-    this.state.heroes = heroes;
-    this.state.enemies = enemies;
+  readonly bus = new EventBus<GameEvents>();
+
+  private readonly cooldowns  = new CooldownSystem();
+  private readonly effects    = new EffectProcessor(this.bus);
+  private readonly validator  = new AbilityValidator();
+  private readonly combat     = new CombatResolver(this.cooldowns, this.bus);
+  private readonly turn       = new TurnManager(this.bus);
+
+  constructor({ heroes, enemies, id }: { heroes: Character[]; enemies: Character[]; id: string }) {
     this.id = id;
-    this.initializeTurnOrder();
+    this.state = {
+      ...this.state,
+      heroes,
+      enemies,
+      ...this.turn.initializeTurnOrder([...heroes, ...enemies]),
+    };
   }
 
   getShortState() {
-    const shortState = {
+    return {
       heroes: this.state.heroes,
       enemies: this.state.enemies.map(enemy => ({
         id: enemy.id,
         name: enemy.name,
         role: enemy.role,
         stats: {
-          health: enemy.stats.health,
-          stamina: enemy.stats.stamina,
-          attack: enemy.stats.attack,
-          defense: enemy.stats.defense,
+          health:   enemy.stats.health,
+          stamina:  enemy.stats.stamina,
+          attack:   enemy.stats.attack,
+          defense:  enemy.stats.defense,
           accuracy: enemy.stats.accuracy,
-          evasion: enemy.stats.evasion,
-        }
+          evasion:  enemy.stats.evasion,
+        },
       })),
-      turnOrder: this.state.turnOrder,
-      effectsQueue: this.state.effectsQueue,
+      turnOrder:     this.state.turnOrder,
+      effectsQueue:  this.state.effectsQueue,
       currentPlayer: this.state.currentPlayer,
-      isGameOver: this.state.isGameOver
+      isGameOver:    this.state.isGameOver,
     };
-
-    return shortState;
   }
 
-  getState() {
+  getState(): State {
     return this.state;
   }
 
-  setEnemyMoviment(moviment: { actionIndex: number; targetId: string; } | null) {
-    this.enemyMoviment = moviment;
-  }
-
-  getId() {
+  getId(): string {
     return this.id;
   }
 
-  applyAction(actionIdx: number, targetId: string) {
-    const player = [...this.state.heroes, ...this.state.enemies].find(char => char.id === this.state.currentPlayer);
-
-    if (!player) {
-      console.error("No current player found!");
-      return;
-    }
-
-    const ability = player.abilities[actionIdx];
-
-    if (!ability) {
-      console.error("Ability not found!");
-      return;
-    }
-
-    if (ability.isBlocked) {
-      console.error("Ability is blocked due to insufficient stamina!");
-      return;
-    }
-
-    const target = [...this.state.heroes, ...this.state.enemies].find(char => char.id === targetId);
-
-
-    if (!target) {
-      console.error("Target not found!");
-      return;
-    }
-
-    player.stats.stamina -= ability.staminaCost;
-    target.stats.health -= ability.value;
-
-    if (ability.cooldown > 0) {
-      this.setCooldown(player.id, ability.id, ability.cooldown);
-    }
-
-    if (target.stats.health < 0) {
-      this.removeCharacter(target.id);
-    }
-
-    if (ability.effects) {
-      ability.effects.forEach(effect => {
-        this.state.effectsQueue.push({ targetId: target.id, effect: effect, remainingDuration: effect.duration });
-      });
-    }
-
-    this.nextTurn();
+  setEnemyMoviment(moviment: { actionIndex: number; targetId: string } | null): void {
+    this.enemyMoviment = moviment;
   }
 
-  applyEffects() {
-    this.state.effectsQueue.forEach((effectEntry, index) => {
-      const target = [...this.state.heroes, ...this.state.enemies].find(char => char.id === effectEntry.targetId);
-      if (target) {
-        target.stats[effectEntry.effect.attribute] += effectEntry.effect.value;
-        effectEntry.remainingDuration -= 1;
-        if (effectEntry.remainingDuration <= 0) {
-          this.state.effectsQueue.splice(index, 1);
-        }
-      }
-    });
-  }
+  applyAction(actionIdx: number, targetId: string): void {
+    const combatResult = this.combat.resolve(this.state, actionIdx, targetId);
+    if (combatResult === null) return;
 
-  checkAvailableActions() {
-    [...this.state.heroes, ...this.state.enemies].forEach(char => {
-      char.abilities.forEach(ability => {
-        const onCooldown = this.getAbilityCooldown(char.id, ability.id) > 0;
-        const hasStamina = char.stats.stamina >= ability.staminaCost;
+    this.state = { ...this.state, ...combatResult.patch };
 
-        if (onCooldown || !hasStamina) {
-          ability.isBlocked = true;
-        } else {
-          ability.isBlocked = false;
-        }
-      });
-    })
-  }
-
-  getAbilityCooldown(playerId: string, abilityId: string) {
-    return (this.state.abilitiesCooldowns[playerId] && this.state.abilitiesCooldowns[playerId][abilityId]) || 0;
-  }
-
-  setCooldown(playerId: string, abilityId: string, cooldown: number) {
-    if (!this.state.abilitiesCooldowns[playerId]) {
-      this.state.abilitiesCooldowns[playerId] = {};
-    }
-    this.state.abilitiesCooldowns[playerId][abilityId] = cooldown;
-  }
-
-  removeCooldowns() {
-    Object.keys(this.state.abilitiesCooldowns).forEach(charId => {
-      const cooldowns = this.state.abilitiesCooldowns[charId];
-
-      if (!cooldowns) {
-        return;
-      }
-
-      Object.keys(cooldowns).forEach(abilityId => {
-        const remainingCooldown = cooldowns[abilityId];
-
-        if (remainingCooldown === undefined) {
-          return;
-        }
-
-        const nextCooldown = remainingCooldown - 1;
-
-        if (nextCooldown <= 0) {
-          delete cooldowns[abilityId];
-          return;
-        }
-
-        cooldowns[abilityId] = nextCooldown;
-      });
-    });
-  }
-
-  removeCharacter(playerId: string) {
-    this.state.heroes = this.state.heroes.filter(hero => hero.id !== playerId);
-    this.state.enemies = this.state.enemies.filter(enemy => enemy.id !== playerId);
-    this.state.turnOrder = this.state.turnOrder.filter(id => id !== playerId);
-  }
-
-  nextTurn() {
-    if (!this.state.currentPlayer) {
-      console.error("No current player to proceed turn!");
-      return;
+    if (combatResult.deadCharacterId !== null) {
+      this.state = { ...this.state, ...this.turn.removeCharacter(this.state, combatResult.deadCharacterId) };
     }
 
-    const currentIndex = this.state.turnOrder.indexOf(this.state.currentPlayer);
-    const nextIndex = (currentIndex + 1) % this.state.turnOrder.length;
-    this.state.currentPlayer = this.state.turnOrder[nextIndex] ?? null;
-    this.applyEffects();
-    this.removeCooldowns();
-    this.checkAvailableActions();
-    this.checkGameOver();
+    this.state = { ...this.state, ...this.turn.nextTurn(this.state) };
+    this.state = { ...this.state, ...this.effects.applyEffects(this.state) };
+    this.state = { ...this.state, ...this.cooldowns.removeCooldowns(this.state) };
+    this.state = { ...this.state, ...this.validator.checkAvailableActions(this.state) };
+    this.state = { ...this.state, ...this.turn.checkGameOver(this.state) };
   }
 
-  checkGameOver() {
-    if (!this.state.heroes.length || !this.state.enemies.length) {
-      this.state.isGameOver = true;
-    }
-  }
-
-  checkIsEnemyTurn() {
-    const currentPlayer = [...this.state.heroes, ...this.state.enemies].find(char => char.id === this.state.currentPlayer);
-    if (currentPlayer) {
-      return this.state.enemies.some(enemy => enemy.id === currentPlayer.id);
-    }
-    return false;
-  }
-
-  initializeTurnOrder() {
-    this.state.turnOrder = [...this.state.heroes, ...this.state.enemies].sort((a, b) => b.stats.velocity - a.stats.velocity).map((char) => char.id);
-    this.state.currentPlayer = this.state.turnOrder[0] ?? null;
+  checkIsEnemyTurn(): boolean {
+    return this.turn.checkIsEnemyTurn(this.state);
   }
 }
