@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import fastify, { type FastifyInstance } from 'fastify';
-import fastifyStatic from '@fastify/static';
 import cors from '@fastify/cors';
 
 import path from 'node:path';
@@ -12,13 +11,19 @@ import { AIService } from './ai-service';
 
 const database = new Map<string, GameEngine>();
 
-export function buildApp(): FastifyInstance {
+export function buildApp({ enableStatic = false }: { enableStatic?: boolean } = {}): FastifyInstance {
   const server = fastify({ logger: false });
 
   server.register(cors, { origin: '*' });
-  server.register(fastifyStatic, {
-    root: path.join(__dirname, '..', 'public')
-  });
+
+  if (enableStatic) {
+    // Load this plugin only for the local server. Its dependency graph is not
+    // needed by the Lambda API and includes ESM-only packages.
+    const fastifyStatic = require('@fastify/static');
+    server.register(fastifyStatic, {
+      root: path.join(__dirname, '..', 'public')
+    });
+  }
 
   server.get('/health-check', async (_request, reply) => {
     return reply.send({ status: 'ok' });

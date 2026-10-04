@@ -1,6 +1,6 @@
 import { buildApp } from './app';
 
-const server = buildApp();
+const server = buildApp({ enableStatic: true });
 
 const start = async () => {
   try {

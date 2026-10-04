@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "package:lambda": "bash scripts/package-lambda.sh",
+    "deploy:lambda": "bash scripts/deploy-lambda.sh"
   },
   "keywords": [],
   "author": "",
