@@ -1,97 +1,15 @@
-import 'dotenv/config';
-import fastify from 'fastify';
-import fastifyStatic from '@fastify/static';
-import cors from '@fastify/cors'
+import { buildApp } from './app';
 
-import path from 'node:path';
-import crypto from 'node:crypto';
-
-import { DATA_BASE_CHARACTERS } from './fakedb';
-
-import { GameEngine } from './game';
-import { AIService } from './ai-service';
-
-const server = fastify({
-  logger: false
-});
-
-server.register(cors, {
-  origin: '*'
-})
-
-server.register(fastifyStatic, {
-  root: path.join(__dirname, '..', 'public')
-});
-
-const database = new Map<string, GameEngine>();
-
-server.post('/game', async (request, reply) => {
-  const gameEngine = new GameEngine({
-    heroes: [DATA_BASE_CHARACTERS[0], DATA_BASE_CHARACTERS[1], DATA_BASE_CHARACTERS[2]],
-    enemies: [DATA_BASE_CHARACTERS[3], DATA_BASE_CHARACTERS[4], DATA_BASE_CHARACTERS[5]],
-    id: crypto.randomUUID()
-  });
-
-  database.set(gameEngine.getId(), gameEngine);
-
-  return reply.status(201).send({
-    id: gameEngine.getId(),
-    state: gameEngine.getShortState()
-  });
-});
-
-server.get('/game/:gameId/state', async (request, reply) => {
-  const { gameId } = request.params as { gameId: string };
-  const gameEngine = database.get(gameId);
-
-  if (!gameEngine) {
-    return reply.status(404).send({ error: 'Game not found' });
-  }
-
-  return reply.send({
-    id: gameEngine.getId(),
-    state: gameEngine.getShortState()
-  });
-});
-
-server.post('/game/:gameId/apply-action', async (request, reply) => {
-  const { gameId } = request.params as { gameId: string };
-  const { targetId, ability } = (request.body) as { targetId: string; ability: number };
-
-  const gameEngine = database.get(gameId);
-
-  if (!gameEngine) {
-    return reply.status(404).send({ error: 'Game not found' });
-  }
-
-  const aiService = new AIService(gameEngine.getState());
-
-  gameEngine.applyAction(ability, targetId);
-
-  let aiResponse: { actionIndex: number; targetId: string; } | null = null;
-
-  if (gameEngine.checkIsEnemyTurn()) {
-    const prompt = aiService.generatePrompt();
-    aiResponse = await aiService.sendPromptToAI(prompt);
-    gameEngine.setEnemyMoviment(aiResponse);
-  }
-
-  return reply.send({
-    id: gameEngine.getId(),
-    state: gameEngine.getShortState(),
-    enemyMoviment: aiResponse || null
-  });
-});
+const server = buildApp();
 
 const start = async () => {
   try {
-    const port = 3000;
-    await server.listen({ port: port, host: '0.0.0.0' });
-    console.log(`Servidor rodando em http://localhost:${port}`);
+    await server.listen({ port: 3000, host: '0.0.0.0' });
+    console.log('Servidor rodando em http://localhost:3000');
   } catch (err) {
     server.log.error(err);
     process.exit(1);
   }
 };
 
-start();
+void start();

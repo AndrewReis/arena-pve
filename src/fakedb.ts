@@ -1,4 +1,4 @@
-import { Character } from "./game";
+import { Character } from "./types";
 
 export const DATA_BASE_CHARACTERS: Character[] = [
   {
