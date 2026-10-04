@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Arena PVE HTTP API
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Architectures:
+      - x86_64
+    MemorySize: 512
+    Timeout: 30
+    ReservedConcurrentExecutions: 10
+
+Resources:
+  ArenaApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: $default
+      CorsConfiguration:
+        AllowOrigins: ['*']
+        AllowMethods: [GET, POST]
+        AllowHeaders: [content-type]
+
+  ArenaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: dist/handler.handler
+      Environment:
+        Variables:
+          OPENAI_MODEL: gpt-4o-mini
+      Events:
+        HealthCheck:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ArenaApi
+            Path: /health-check
+            Method: GET
+        CreateGame:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ArenaApi
+            Path: /game
+            Method: POST
+        GetGameState:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ArenaApi
+            Path: /game/{gameId}/state
+            Method: GET
+        ApplyAction:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ArenaApi
+            Path: /game/{gameId}/apply-action
+            Method: POST
+
+Outputs:
+  ApiUrl:
+    Description: HTTP API endpoint
+    Value: !Sub https://${ArenaApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}
